@@ -26,17 +26,21 @@
 // SOFTWARE.
 //
 
-//chiamo librerie
+// import libs
 #include "yocto_raytrace.h"
+
 #include <yocto/yocto_color.h>
 #include <yocto/yocto_geometry.h>
 #include <yocto/yocto_parallel.h>
 #include <yocto/yocto_shading.h>
 
+// new libs
+#include <yocto_gui/yocto_shade.h>
+
 // -----------------------------------------------------------------------------
 // IMPLEMENTATION FOR SCENE EVALUATION
 // -----------------------------------------------------------------------------
-namespace yocto {   //chiamata primo modulo: implementation for scene eval
+namespace yocto {
 
 // Check texture size
 static vec2i texture_size(const raytrace_texture* texture) {
@@ -101,8 +105,14 @@ static vec4f eval_texture(const raytrace_texture* texture, const vec2f& uv,
 // Generates a ray from a camera for yimg::image plane coordinate uv and
 // the lens coordinates luv.
 static ray3f eval_camera(const raytrace_camera* camera, const vec2f& image_uv) {
-  // YOUR CODE GOES HERE -----------------------
-  return {};
+  // YOUR CODE GOES HERE ----------------------- done
+  // as in the slides:
+  auto q = vec3f{camera->film.x * (0.5 - image_uv.x),
+      camera->film.y * (image_uv.y - 0.5), camera->lens};
+  auto e = vec3f{0};
+  auto d = normalize(-q - e);
+  return ray3f{
+      transform_point(camera->frame, e), transform_direction(camera->frame, d)};
 }
 
 // Eval position
@@ -131,9 +141,22 @@ static vec3f eval_element_normal(const raytrace_shape* shape, int element) {
 // Eval normal
 static vec3f eval_normal(
     const raytrace_shape* shape, int element, const vec2f& uv) {
-  // YOUR CODE GOES HERE -----------------------
-  return {0, 0, 0};
+  // YOUR CODE GOES HERE -----------------utile per terza e quinta richiesta
+  // if (shape->normals.empty()) return eval_element_normal(shape, element);
+
+  if (!shape->triangles.empty()) {
+    auto t = shape->triangles[element];
+    return normalize(interpolate_triangle(
+        shape->normals[t.x], shape->normals[t.y], shape->normals[t.z], uv));
+  } else if (!shape->lines.empty()) {
+    auto l = shape->lines[element];
+    return interpolate_line(shape->normals[l.x], shape->normals[l.y], uv.x);
+  } else {
+    return {0, 0, 1};
+  }
 }
+
+// namespace yocto
 
 // Eval texcoord
 static vec2f eval_texcoord(
@@ -148,21 +171,12 @@ static vec3f eval_environment(const raytrace_scene* scene, const ray3f& ray) {
   return {0, 0, 0};
 }
 
-}  
+}  // namespace yocto
 
-
-
-
-
-
-
-
-
-// namespace yocto
 // -----------------------------------------------------------------------------
 // IMPLEMENTATION FOR SHAPE/SCENE BVH
 // -----------------------------------------------------------------------------
-namespace yocto {   //secondo modulo namespace
+namespace yocto {
 
 // primitive used to sort bvh entries
 struct raytrace_bvh_primitive {
@@ -523,64 +537,62 @@ raytrace_intersection intersect_instance_bvh(const raytrace_instance* instance,
   return intersection;
 }
 
-}  
-
-
-
-
-
-
-
-
-
-
-
-
-
-// namespace yocto
+}  // namespace yocto
 
 // -----------------------------------------------------------------------------
 // IMPLEMENTATION FOR PATH TRACING
 // -----------------------------------------------------------------------------
-namespace yocto {    //terzo modulo namespace
+namespace yocto {
 
 // Raytrace renderer.
 static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
+  // YOUR CODE GOES HERE ----------------------- seta richiesta
   return {0, 0, 0, 0};
 }
 
 // Eyelight for quick previewing.
 static vec4f shade_eyelight(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
+  // YOUR CODE GOES HERE ----------------------- quinta richiesta
   return {0, 0, 0, 0};
 }
 
 static vec4f shade_normal(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
-  return {0, 0, 0, 0};
+  // YOUR CODE GOES HERE ----------------------- terza richiesta
+  // interseco punti successivi
+  auto isec = intersect_scene_bvh(scene, ray);
+  if (!isec.hit) return zero4f;
+  // shading point
+  auto object = scene->objects[isec.object];
+  auto shape  = object->shape;
+  auto normal = transform_normal(
+      object->frame, eval_normal(shape, isec.element, isec.uv));
+  return {normal * 0.5f + 0.5f, 1};
 }
 
 static vec4f shade_texcoord(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
+  // YOUR CODE GOES HERE ----------------------- quarta richiesta
   return {0, 0, 0, 0};
 }
 
 static vec4f shade_color(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
-  return {0, 0, 0, 0};
+  // YOUR CODE GOES HERE ----------------------- seconda richiesta
+  // intersezione con prossimo punto
+  auto isec = intersect_scene_bvh(scene, ray);
+  if (!isec.hit) return zero4f;
+  // preparo il punto di shading
+  auto object = scene->objects->[isec.object];
+  return {object->material->color, 1};  // return color
 }
 
 // Trace a single ray from the camera using the given algorithm.
 using raytrace_shader_func = vec4f (*)(const raytrace_scene* scene,
     const ray3f& ray, int bounce, rng_state& rng,
     const raytrace_params& params);
-
 static raytrace_shader_func get_shader(const raytrace_params& params) {
   switch (params.shader) {
     case raytrace_shader_type::raytrace: return shade_raytrace;
@@ -595,11 +607,14 @@ static raytrace_shader_func get_shader(const raytrace_params& params) {
   }
 }
 
+// MAIN LOOP
+
 // Trace a block of samples
 void render_sample(raytrace_state* state, const raytrace_scene* scene,
     const raytrace_camera* camera, const vec2i& ij,
     const raytrace_params& params) {
-  // YOUR CODE GOES HERE -----------------------
+  // YOUR CODE GOES HERE ----------------------- prima richiesta
+  return render_samples(state, scene, camera, params);
 }
 
 // Init a sequence of random number generators.
@@ -621,39 +636,82 @@ void init_state(raytrace_state* state, const raytrace_scene* scene,
     rng = make_rng(params.seed, rand1i(init_rng, 1 << 31) / 2 + 1);
   }
 }
+//
+//
 
-
-// Progressively compute an image by calling trace_samples multiple times.
+// Progressively compute an image by calling trace_samples multiple times
 void render_samples(raytrace_state* state, const raytrace_scene* scene,
     const raytrace_camera* camera, const raytrace_params& params) {
-  if (params.noparallel) {  //
-    // YOUR CODE GOES HERE -----------------------
+  //
+  // YOUR CODE GOES HERE ----------------------- prima richiesta seconda parte
+  // set size
+  auto size =
+      (camera->film.x > camera->film.y)
+          ? vec2i{params.resolution,
+                (int)round(params.resolution * camera->film.y / camera->film.x)}
+          : vec2i{
+                (int)round(params.resolution * camera->film.x / camera->film.y),
+                params.resolution};
+  auto img_size = size.x * size.y;
+
+  //// init cycles
+  if (params.noparallel) {
+    for (auto j = 0; j < size.y; j++) {
+      for (auto i = 0; i < size.x; i++) {
+        // grab the pixel
+        auto puv = rand2f(state->rngs[i, j]);
+        // get pixel uv from rng
+        auto uv = (vec2f{i, j} + puv / (img_size));
+        // get camera ray
+        auto ray = camera_ray(camera->frame, camera->lens, camera->film, uv);
+        // call shader img
+        auto color = shade_color(scene, ray, 0, (state->rngs[i, j]), params);
+        // clamp to max value
+        if (length(xyz(color)) > params.clamp) {
+          color = normalize(color) * params.clamp;
+        }
+        // update state accumulation, samples and render
+        state->accumulation[{i, j}] += color;
+        state->samples[{i, j}] += 1;
+        state->render[{i, j}] = (state->accumulation[{i, j}]) /
+                                (state->samples[{i, j}]);
+      };
+    }
   } else {
     // YOUR CODE GOES HERE -----------------------
+    parallel_for(img_size, [state, scene, camera, &params](const vec2i& ij) {
+      // grab the pixel
+      auto puv = rand2f(state->rngs[ij]);
+      // get pixel uv from rng
+      auto uv = (vec2i{ij} + puv / (img_size));
+      // get camera ray
+      auto ray = camera_ray(camera->frame, camera->lens, camera->film, uv);
+      // call shader
+      auto color = shade_color(scene, ray, 0, (state->rngs[ij]), params);
+      // clamp to max value
+      if (length(xyz(color)) > params.clamp) {
+        color = normalize(color) * params.clamp;
+      }
+      // update state accumulation, samples and render
+      state->accumulation[{ij}] += color;
+      state->samples[{ij}] += 1;
+      state->render[{ij}] = (state->accumulation[{ij}]) /
+                            (state->samples[{ij}]);
+    });
   }
-}
-
-}  
-
-
-
-
-
-
-
-
-
-
-
-
-
+}  // namespace yocto
 
 // namespace yocto
+
+//
+//
+//
+
 // -----------------------------------------------------------------------------
 // SCENE CREATION
 // -----------------------------------------------------------------------------
-namespace yocto {    //quarta 
 
+namespace yocto {
 // cleanup
 raytrace_shape::~raytrace_shape() {
   if (bvh) delete bvh;
