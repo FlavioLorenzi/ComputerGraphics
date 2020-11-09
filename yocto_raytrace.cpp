@@ -175,6 +175,7 @@ static vec2f eval_texcoord(
     const raytrace_shape* shape, int element, const vec2f& uv) {
   // YOUR CODE GOES HERE ----------------------- identico a eval normal con txc
   if (shape->texcoords.empty()) return uv;
+
   if (!shape->triangles.empty()) {
     auto t = shape->triangles[element];
     return interpolate_triangle(shape->texcoords[t.x], shape->texcoords[t.y],
@@ -182,8 +183,10 @@ static vec2f eval_texcoord(
   } else if (!shape->lines.empty()) {
     auto l = shape->lines[element];
     return interpolate_line(shape->texcoords[l.x], shape->texcoords[l.y], uv.x);
+  } else if (!shape->points.empty()) {
+    return shape->texcoords[shape->points[element]];
   } else {
-    return {0, 0};
+    return zero2f;
   }
 }
 
@@ -582,7 +585,7 @@ namespace yocto {
 // Raytrace renderer.
 static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
-  // YOUR CODE GOES HERE ----------------------- sesta richiesta
+  // YOUR CODE GOES HERE -----------------------
   // intersect next point: stesso setup dell'eyelight
   auto isec = intersect_scene_bvh(scene, ray);
   auto ee_x = eval_environment(scene, ray).x;
@@ -593,149 +596,189 @@ static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
   // shading point, eval geometry and normal corrextions
   auto instance = scene->instances[isec.instance];
   auto shape    = instance->shape;
-  auto normal   = transform_direction(
-      instance->frame, eval_normal(shape, isec.element, isec.uv));
-
-  auto incoming_dir = -ray.d;  // outgoing
-  auto texcoord     = eval_texcoord(shape, isec.element, isec.uv);
-  auto position     = transform_point(
+  auto material = instance->material;
+  auto position = transform_point(
       instance->frame, eval_position(shape, isec.element, isec.uv));
+  auto normal = transform_direction(
+      instance->frame, eval_normal(shape, isec.element, isec.uv));
+  auto outgoing = -ray.d;
 
+  ////
   if (!instance->shape->lines.empty()) {
-    normal = orthonormalize(normal, incoming_dir);
+    // con la linea ci serve la tangente!
+    normal = orthonormalize(outgoing, normal);
   } else if (!instance->shape->triangles.empty()) {
-    if (dot(incoming_dir, normal) < 0) {
-      normal = -normal;
-    }
+    // se la normale guarda verso l esterno, cambia segno
+    if (dot(outgoing, normal) < 0) normal = -normal;
   }
 
-  // lookat material values:
-  // each material defined as scalar
-  auto emission = instance->material->emission;  // *
-  // eval_texture(instance->material->emission_tex, texcoord, true).x;
-  auto color = instance->material->color *
-               eval_texture(instance->material->color_tex, texcoord).x;
-  auto metallic = instance->material->metallic *
-                  eval_texture(instance->material->metallic_tex, texcoord).x;
-  auto roughness = instance->material->roughness *
-                   eval_texture(instance->material->roughness_tex, texcoord).x;
-  auto transmission =
-      instance->material->transmission *
-      eval_texture(instance->material->transmission_tex, texcoord).x;
+  auto texcoord = eval_texcoord(shape, isec.element, isec.uv);
 
-  auto specular = instance->material->specular *
-                  eval_texture(instance->material->specular_tex, texcoord).x;
+  // Materials and textures: each one is a f. scalar (tranne color e emission)
 
-  /////HANDLE OPACITY
-  auto opacity = instance->material->opacity;
-  // handle opacity A
-  if (instance->material->opacity_tex) {
-    opacity = opacity * eval_texture(instance->material->opacity_tex, texcoord)
-                            .x;  // take only first coord as above
-  }
+  auto color = material->color *
+               xyz(eval_texture(material->color_tex, texcoord));
+  auto emission = material->emission *
+                  xyz(eval_texture(material->emission_tex, texcoord));
+  auto specular = material->specular *
+                  (eval_texture(material->specular_tex, texcoord)).x;
+  auto metallic = material->metallic *
+                  (eval_texture(material->metallic_tex, texcoord)).x;
+  auto roughness = material->roughness *
+                   (eval_texture(material->roughness_tex, texcoord)).x;
+
+  // conv
+  roughness = roughness * roughness;
+
+  auto transmission = material->transmission *
+                      (eval_texture(material->transmission_tex, texcoord)).x;
+
+  // Handling opacity
+  auto opacity = material->opacity;
+  if (material->opacity_tex)
+    // take the first coord as above
+    opacity = opacity * (eval_texture(material->opacity_tex, texcoord)).x;
+
+  // Check on opacity
   if (rand1f(rng) > opacity) {
-    return shade_raytrace(scene, {position, ray.d}, bounce + 1, rng, params);
+    auto incoming = -outgoing;
+    return shade_raytrace(scene, {position, incoming}, bounce + 1, rng, params);
   }
-  //
-  // handle opacity B
-  /*if (opacity < 1 && rand1f(rng) > opacity) {
-    if (opacity < 1 && rand1f(rng) > opacity) {
-      return shade_raytrace(
-          scene, ray3f{position, incoming_dir}, bounce + 1, rng, params);
-      return shade_raytrace(
-          scene, {position + ray.d * 1e-2f, ray.d}, bounce + 1, rng, params);
-    }
-  }*/
 
+  // setup color and exit if enough bounces are done
   // accumulate emission
   auto radiance = emission;
+  if (bounce >= params.bounces) {
+    return {radiance.x, radiance.y, radiance.z, 1};
+  }
 
-  // exit if enough bounces are done
-  if (bounce >= params.bounces) return {radiance.x, radiance.y, radiance.z, 1};
-  {
-    // compute indishrt illumination
+  // Handling materials now!
+  //// final loop: shader per una varietà di materiali
+
+  if (transmission) {
+    // Polished dieletric:
+    // Scatter light both REFLECTING and TRANSMITTING
+    /* Vogliamo solo un raggio di luce continuo e scegliamo casualmente la
+     direzione in cui andare in base al termine fresnel ---> non aggiornare i
+     pesi Fresnel. Il coefficiente di riflessione è piccolo pari a K_s = 0.04
+     */
+    // PUNTO EXTRA: qui va implementata la rifrazione: in questo tipo di
+    // materiali la luce passa e viene rifratta!
+    //
+
+    // make refract index
+    auto refract_index = (reflectivity_to_eta(vec3f{0.04}));
+
+    // Evaluate Fresnel term1
+    auto fs = fresnel_schlick(vec3f{0.04}, normal, outgoing);
+
+    auto eta = pow(refract_index, -1);
+    /*
+        if (rand1f(rng) < mean(refract_index)) {  // changed here
+          auto incoming = refract(outgoing, normal, mean(eta));
+          radiance += xyz(
+              shade_raytrace(scene, {position, incoming}, bounce + 1, rng,
+       params));
+        } */
+    if (rand1f(rng) < mean(fs)) {
+      auto incoming = reflect(outgoing, normal);
+      radiance += xyz(
+          shade_raytrace(scene, {position, incoming}, bounce + 1, rng, params));
+    } else {
+      auto incoming = -outgoing;
+      radiance += color * xyz(shade_raytrace(scene, {position, incoming},
+                              bounce + 1, rng, params));
+    }
+
+  } else if (metallic && !roughness) {
+    // Polished metal:
+    // Diffondono la luce come specchi (riflettono). Il colore
+    // della superficie cambia ad incidenza normale seguendo le leggi di
+    // Fresnel
+
+    auto incoming = reflect(outgoing, normal);
+    auto fs       = fresnel_schlick(color, normal, outgoing);
+    radiance += fs * xyz(shade_raytrace(
+                         scene, {position, incoming}, bounce + 1, rng, params));
+  } else if (metallic && roughness) {
+    // Rough metal:
+    // Perché bisettrice (o halfway) e non normale? Questo perché la normale
+    // effettiva del microfacet è la metà h tra l'ingresso e l'uscita, ovvero
+    //  h = o+1/|o+i|
+
+    // Incoming dir
     auto incoming = sample_hemisphere(normal, rand2f(rng));
+
+    // Bisettrice
+    auto halfway = normalize(outgoing + incoming);
+
+    // Fresnel term
+    auto fs = fresnel_schlick(color, halfway, outgoing);
+
+    // Ogni micro sfaccettatura diffonde la luce come uno specchio metallico.
+    // Pertanto, la distribuzione rappresenta il rapporto dei microfacets
+    // orientati lungo la bisettrice h
+    auto distribution = microfacet_distribution(roughness, normal, halfway);
+
+    // Il termine shadowing cattura il rapporto tra microfacet visibile da un
+    // particolare angolo in entrata e in uscita
+    auto geometric = microfacet_shadowing(
+        roughness, normal, halfway, outgoing, incoming);
+
+    // den di ogni termine sumation
+    //    4*|normal * outgoing|*|normal * incoming|
+    auto denominator = 4 * abs(dot(normal, incoming)) *
+                       abs(dot(normal, outgoing));
+    // Summation term
+    auto sum_term = fs * distribution * geometric / denominator;
+
+    // Computing lighting (recursively)
+    radiance += (2 * pif) * abs(dot(normal, incoming)) * sum_term *
+                xyz(shade_raytrace(
+                    scene, {position, incoming}, bounce + 1, rng, params));
+  } else if (specular) {
+    // Plastic:
+    // La plastica è modellata come una superficie opaca rivestita con uno
+    // strato dielettrico. Approssimato come somma di un contributo diffuso e
+    // speculare:
+    //  lo Specular layer riflette la luce (K_s = 0.04 is good)
+    //  e la Diffuse Component è ponderata di uno meno il contributo di quella
+    //  speculare per conservare l'energia
+
+    // Sempre gli stessi steps!!!
+    auto incoming = sample_hemisphere(normal, rand2f(rng));
+
+    auto halfway = normalize(outgoing + incoming);
+
+    auto fs = fresnel_schlick(vec3f{0.04}, halfway, outgoing);
+
+    auto distribution = microfacet_distribution(roughness, normal, halfway);
+
+    auto geometric = microfacet_shadowing(
+        roughness, normal, halfway, outgoing, incoming);
+
+    auto denominator = 4 * abs(dot(normal, incoming)) *
+                       abs(dot(normal, outgoing));
+
+    auto sum_term = fs * distribution * geometric / denominator;
+
+    radiance += (2 * pif) * (color / pif * (1 - fs) + sum_term) *
+                abs(dot(normal, incoming)) *
+                xyz(shade_raytrace(
+                    scene, {position, incoming}, bounce + 1, rng, params));
+
+  } else {
+    // Diffuse light
+    auto incoming = sample_hemisphere(normal, rand2f(rng));
+    // Errori di ombreggiatura: aggiungiamo un piccolo epsilon se il raggio
+    // interseca la forma e il punto di ombreggiatura (già fatto prima)
     radiance += (2 * pif) * (color / pif) * abs(dot(normal, incoming)) *
                 xyz(shade_raytrace(
                     scene, {position, incoming}, bounce + 1, rng, params));
   }
 
-  // fresnel = fresnel schlick(color, halfway, outgoing)
-
-  // final loop: shader per una varietà di materiali
-  if (transmission) {
-    // transmission -> polished dielectric
-    // handle polished dielectrics
-    auto fsc = fresnel_schlick({0.04, 0.04, 0.04}, normal, incoming_dir);
-    if (rand1f(rng) < fsc.x) {
-      auto incoming = reflect(incoming_dir, normal);
-      auto shr      = shade_raytrace(
-          scene, ray3f{position, incoming}, bounce + 1, rng, params);
-      radiance += vec3f{shr.x, shr.y, shr.z};
-
-    } else {
-      auto incoming = -incoming_dir;
-      auto shr      = shade_raytrace(
-          scene, ray3f{position, incoming}, bounce + 1, rng, params);
-      radiance += color * vec3f{shr.x, shr.y, shr.z};
-    }
-
-  } else if (metallic && !roughness) {
-    // metallic && !roughness -> polished metal
-    auto incoming = reflect(incoming_dir, normal);
-    auto shr      = shade_raytrace(
-        scene, ray3f{position, incoming}, bounce + 1, rng, params);
-
-    radiance += fresnel_schlick(color, normal, incoming_dir) *
-                vec3f{shr.x, shr.y, shr.z};
-
-  } else if (metallic && roughness) {
-    // metallic &&  roughness -> rough metal
-    auto incoming = reflect(incoming_dir,
-        normal);  // microfacet_reflection(1.5f,roughness,normal,incoming_dir,rand2f(rng));
-
-    auto halfway = normalize(incoming_dir + incoming);
-    auto shr     = shade_raytrace(
-        scene, ray3f{position, incoming}, bounce + 1, rng, params);
-
-    radiance += (2 * pi) * fresnel_schlick(color, halfway, incoming_dir) *
-                microfacet_distribution(roughness, normal, halfway) *
-                microfacet_shadowing(
-                    roughness, normal, halfway, incoming_dir, incoming, true) /
-                (4 * dot(normal, incoming_dir) * dot(normal, incoming)) *
-                vec3f{shr.x, shr.y, shr.z} * dot(normal, incoming);
-
-  } else if (specular) {
-    // specular -> rough plastic
-    auto incoming = sample_hemisphere(normal, rand2f(rng));
-    auto halfway  = normalize(incoming_dir + incoming);
-
-    auto shr = shade_raytrace(
-        scene, ray3f{position, incoming}, bounce + 1, rng, params);
-
-    radiance +=
-        (2 * pif) *
-        (color / pif *
-                (1 - fresnel_schlick(
-                         {0.04, 0.04, 0.04}, halfway, incoming_dir)) +
-            fresnel_schlick({0.04, 0.04, 0.04}, halfway, incoming_dir) *
-                microfacet_distribution(roughness, normal, halfway) *
-                microfacet_shadowing(
-                    roughness, normal, halfway, incoming_dir, incoming, true) /
-                (4 * dot(normal, incoming_dir) * dot(normal, incoming))) *
-        vec3f{shr.x, shr.y, shr.z};
-
-  } else {
-    // handle diffuse
-    auto incoming = sample_hemisphere(normal, rand2f(rng));
-    auto sr       = ray3f();
-
-    auto shr = shade_raytrace(scene, sr, bounce + 1, rng, params);
-
-    radiance += (2 * pif) * (color / pif) * vec3f{shr.x, shr.y, shr.z} *
-                dot(normal, incoming);
-  }
-  return vec4f{radiance.x, radiance.y, radiance.z, 1};
+  // auto dp = color * abs(dot(normal, incoming));
+  return vec4f{radiance.x, radiance.y, radiance.z, 1.0f};
 }  // namespace yocto
 
 /////////////////////////////////////////////////
