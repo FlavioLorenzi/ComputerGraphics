@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../bin/libyocto_raytrace.a  CMakeFiles/yocto_raytrace.dir/yocto_raytrace.cpp.o
+/usr/bin/ranlib ../../bin/libyocto_raytrace.a
