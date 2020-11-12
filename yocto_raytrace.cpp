@@ -582,6 +582,110 @@ raytrace_intersection intersect_instance_bvh(const raytrace_instance* instance,
 // -----------------------------------------------------------------------------
 namespace yocto {
 
+///////////////////////////////////////////////////
+////////////7 EXTRA POINT 2 ////////////////////////
+///////////////////////////////////////////////////
+////// my own shader
+
+static vec4f shade_cartoon(const raytrace_scene* scene, const ray3f& ray,
+    int bounce, rng_state& rng, const raytrace_params& params) {
+  auto isec = intersect_scene_bvh(scene, ray);
+
+  auto ee_x = eval_environment(scene, ray).x;
+  auto ee_y = eval_environment(scene, ray).y;
+  auto ee_z = eval_environment(scene, ray).z;
+  if (!isec.hit) return {ee_x, ee_y, ee_z, 1};
+
+  // can be useful to implemetnt
+  auto instance = scene->instances[isec.instance];
+  auto shape    = instance->shape;
+  auto material = instance->material;
+
+  auto position = transform_point(
+      instance->frame, eval_position(shape, isec.element, isec.uv));
+
+  auto normal = transform_direction(
+      instance->frame, eval_normal(shape, isec.element, isec.uv));
+  auto outgoing = -ray.d;
+  ///
+
+  if (!instance->shape->lines.empty()) {
+    // con la linea ci serve la tangente!
+    normal = orthonormalize(outgoing, normal);
+  } else if (!instance->shape->triangles.empty()) {
+    // se la normale guarda verso l esterno, cambia segno
+    if (dot(outgoing, normal) < 0) normal = -normal;
+  }
+  // WE TRY TO APPROXIMATE COLORS
+
+  // calcolo illuminazione dalla luce direzionale e del colore
+  // auto incoming = sample_hemisphere(normal, rand2f(rng));
+  auto incoming = vec3f{1, 2, 5};  // prendo un punto fisso
+
+  auto WorldSpaceLP = vec3f{1, 10, 10};  // vettore che punta all'opposto
+
+  auto texcoord = eval_texcoord(shape, isec.element, isec.uv);
+  auto color    = material->color *
+               xyz(eval_texture(material->color_tex, texcoord));
+
+  auto NdotL = dot(WorldSpaceLP, normal);
+
+  // SHADOWS ! ! !
+  // se prima di colpire la sorgente interseca il pavimento
+  // quel punto sara in ombra!
+  auto  isecx = intersect_scene_bvh(scene, {position, incoming});
+  float shadow;
+  if (isecx.hit)
+    shadow = 0;
+  else
+    shadow = 1;
+
+  // NB: è una funzione simile alla sigmoide
+  // con input : real number x, left edge, right edge
+  // ritorna 0 se x è minoreuguale al left edge, 1 altrimenti
+  // ritorna invece un'interpolazione smoothata tra 0 e 1
+  // float lightIntensity = smoothstep(0, 0.01, NdotL);
+
+  float lightIntensity = smoothstep(0, 0.01, NdotL * shadow);
+
+  // Ambient Light
+  auto AmbientColor = vec4f{0.4, 0.4, 0.4, 1};
+
+  auto light = lightIntensity * LightColor;
+
+  // Specular Reflection
+  auto  SpecularColor = vec4f{0.9, 0.9, 0.9, 1};  // titns the reflection
+  float Glossiness    = 32;                       // size of the reflection
+
+  auto  halfVector        = normalize(WorldSpaceLP + outgoing);  // halfway
+  float NdotH             = dot(normal, halfVector);
+  float specularIntensity = pow(
+      NdotH * lightIntensity, Glossiness * Glossiness);
+
+  // once again use smoothstep to toonify the reflextion
+  float specularIntensitySmooth = smoothstep(0.005, 0.01, specularIntensity);
+  auto  specular                = specularIntensitySmooth * SpecularColor;
+
+  // Rim light: simulate the reflection of the light
+  auto rimDot = 1 - dot(outgoing, normal);
+
+  auto  RimColor  = vec4f{1, 1, 1, 1};
+  float RimAmount = 0.716;  // Tra 0 e 1
+
+  float RimThreshold = 0.1;  // Tra 0 e 1
+
+  float rimIntensity = rimDot * pow(NdotL, RimThreshold);
+  rimIntensity = smoothstep(RimAmount - 0.01, RimAmount + 0.01, rimIntensity);
+  auto rim     = rimIntensity * RimColor;
+
+  auto radiance = color * xyz(AmbientColor + light + specular + rim);
+
+  return vec4f{radiance.x, radiance.y, radiance.z, 1};
+}
+/////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
+
 // Raytrace renderer.
 static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
     int bounce, rng_state& rng, const raytrace_params& params) {
@@ -603,13 +707,16 @@ static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
       instance->frame, eval_normal(shape, isec.element, isec.uv));
   auto outgoing = -ray.d;
 
-  ////
+  // dot prod
+  auto NdotO = dot(outgoing, normal);
+
+  ////handling normals and lines
   if (!instance->shape->lines.empty()) {
     // con la linea ci serve la tangente!
     normal = orthonormalize(outgoing, normal);
   } else if (!instance->shape->triangles.empty()) {
     // se la normale guarda verso l esterno, cambia segno
-    if (dot(outgoing, normal) < 0) normal = -normal;
+    if (NdotO < 0) normal = -normal;
   }
 
   auto texcoord = eval_texcoord(shape, isec.element, isec.uv);
@@ -661,33 +768,40 @@ static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
     /* Vogliamo solo un raggio di luce continuo e scegliamo casualmente la
      direzione in cui andare in base al termine fresnel ---> non aggiornare i
      pesi Fresnel. Il coefficiente di riflessione è piccolo pari a K_s = 0.04
-     */
-    // PUNTO EXTRA: qui va implementata la rifrazione: in questo tipo di
-    // materiali la luce passa e viene rifratta!
-    //
+     */ //NB: se il materiale è fino ed è un polished dieletric -> refraction
 
-    // make refract index
-    auto refract_index = (reflectivity_to_eta(vec3f{0.04}));
+    // Evaluate Fresnel term
+    auto fs = fresnel_schlick(vec3f{0.04, 0.04, 0.04}, normal, outgoing);
 
-    // Evaluate Fresnel term1
-    auto fs = fresnel_schlick(vec3f{0.04}, normal, outgoing);
+    if (material->thin) {  // check per l'EXTRA POINT 1 ////////////////////NB//
 
-    auto eta = pow(refract_index, -1);
-    /*
-        if (rand1f(rng) < mean(refract_index)) {  // changed here
-          auto incoming = refract(outgoing, normal, mean(eta));
-          radiance += xyz(
-              shade_raytrace(scene, {position, incoming}, bounce + 1, rng,
-       params));
-        } */
-    if (rand1f(rng) < mean(fs)) {
-      auto incoming = reflect(outgoing, normal);
-      radiance += xyz(
-          shade_raytrace(scene, {position, incoming}, bounce + 1, rng, params));
+      // Random
+      if (rand1f(rng) < mean(fs)) {
+        auto incoming = reflect(outgoing, normal);
+        radiance += xyz(shade_raytrace(
+            scene, {position, incoming}, bounce + 1, rng, params));
+      } else {
+        auto incoming = -outgoing;
+        radiance += color * xyz(shade_raytrace(scene, {position, incoming},
+                                bounce + 1, rng, params));
+      }
     } else {
-      auto incoming = -outgoing;
-      radiance += color * xyz(shade_raytrace(scene, {position, incoming},
-                              bounce + 1, rng, params));
+      // take index of refraction and its inverse: Apply Refraction! !
+      auto ior = reflectivity_to_eta(vec3f{0.04, 0.04, 0.04});
+      auto eta = 1.f / mean(ior);
+
+      if (rand1f(rng) < mean(fs)) {
+        auto incoming = reflect(outgoing, normal);
+        radiance += xyz(shade_raytrace(
+            scene, {position, incoming}, bounce + 1, rng, params));
+      } else {
+        // inverti eta se il prodotto e' minore di zero
+        auto incoming = NdotO < 0 ? refract(outgoing, normal, 1 / eta)
+                                  : refract(outgoing, normal, eta);
+
+        radiance += color * xyz(shade_raytrace(scene, {position, incoming},
+                                bounce + 1, rng, params));
+      }
     }
 
   } else if (metallic && !roughness) {
@@ -781,8 +895,8 @@ static vec4f shade_raytrace(const raytrace_scene* scene, const ray3f& ray,
   return vec4f{radiance.x, radiance.y, radiance.z, 1.0f};
 }  // namespace yocto
 
+//////////////////////////////////////////////
 /////////////////////////////////////////////////
-////////////////////////////////////////////////
 
 // Eyelight for quick previewing.
 static vec4f shade_eyelight(const raytrace_scene* scene, const ray3f& ray,
@@ -803,15 +917,15 @@ static vec4f shade_eyelight(const raytrace_scene* scene, const ray3f& ray,
   auto normal   = transform_direction(
       instance->frame, eval_normal(shape, isec.element, isec.uv));
 
-  auto incoming_dir = -ray.d;
-  auto texcoord     = eval_texcoord(shape, isec.element, isec.uv);
-  auto position     = transform_point(
+  auto dir      = -ray.d;
+  auto texcoord = eval_texcoord(shape, isec.element, isec.uv);
+  auto position = transform_point(
       instance->frame, eval_position(shape, isec.element, isec.uv));
 
   // return the color and the absolute value between the dot prod.
-  // of the normal and the incoming dishrtion
+  // of the normal and the outgoing direction
   auto color = instance->material->color;
-  auto sc    = color * abs(dot(normal, incoming_dir));  // shortcut
+  auto sc    = color * abs(dot(normal, dir));  // shortcut
   return {sc.x, sc.y, sc.z, 1};
 }
 
@@ -872,6 +986,7 @@ static raytrace_shader_func get_shader(const raytrace_params& params) {
     case raytrace_shader_type::normal: return shade_normal;
     case raytrace_shader_type::texcoord: return shade_texcoord;
     case raytrace_shader_type::color: return shade_color;
+    case raytrace_shader_type::cartoon: return shade_cartoon;  // extra point 2
     default: {
       throw std::runtime_error("sampler unknown");
       return nullptr;
