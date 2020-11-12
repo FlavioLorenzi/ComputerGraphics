@@ -6,3 +6,5 @@ AIRO course of Fundamentals for Computer Graphics:
 Three homeworks (Raytracing, to do, to do) and final project (to do).
 
 # Raytracing
+
+![]()
