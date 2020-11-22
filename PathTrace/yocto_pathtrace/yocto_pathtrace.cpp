@@ -104,7 +104,21 @@ static vec4f eval_texture(const pathtrace_texture* texture, const vec2f& uv,
 static ray3f eval_camera(const pathtrace_camera* camera, const vec2f& image_uv,
     const vec2f& lens_uv) {
   // YOUR CODE GOES HERE ----------------------------------------------------
-  return {};
+  // point on the image plane
+  auto q = vec3f{camera->film.x * (0.5f - image_uv.x),
+      camera->film.y * (image_uv.y - 0.5f), camera->lens};
+  // ray direction through the lens center
+  auto dc = -normalize(q);
+  // point on the lens
+  auto e = vec3f{
+      lens_uv.x * camera->aperture / 2, lens_uv.y * camera->aperture / 2, 0};
+  // point on the focus plane
+  auto p = dc * camera->focus / abs(dc.z);
+  // correct ray direction to account for camera focusing
+  auto d = normalize(p - e);
+  // done
+  return ray3f{
+      transform_point(camera->frame, e), transform_direction(camera->frame, d)};
 }
 
 // Samples a camera ray at pixel ij of an image of size size with puv and luv
@@ -112,8 +126,10 @@ static ray3f eval_camera(const pathtrace_camera* camera, const vec2f& image_uv,
 static ray3f sample_camera(const pathtrace_camera* camera, const vec2i& ij,
     const vec2i& size, const vec2f& puv, const vec2f& luv) {
   // YOUR CODE GOES HERE ----------------------------------------------------
-  return {};
-}
+  auto uv = vec2f{(ij.x + puv.x) / size.x, (ij.y + puv.y) / size.y};
+  return eval_camera(camera, uv, sample_disk(luv));
+
+}  // namespace yocto
 
 // Eval position
 static vec3f eval_position(
@@ -715,7 +731,8 @@ static vec3f eval_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
   if (brdf.roughness == 0) return zero3f;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0};
 }
 
@@ -723,7 +740,8 @@ static vec3f eval_delta(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
   if (brdf.roughness != 0) return zero3f;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0};
 }
 
@@ -732,7 +750,8 @@ static vec3f sample_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, float rnl, const vec2f& rn) {
   if (brdf.roughness == 0) return zero3f;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0};
 }
 
@@ -740,7 +759,8 @@ static vec3f sample_delta(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, float rnl) {
   if (brdf.roughness != 0) return zero3f;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0};
 }
 
@@ -749,7 +769,8 @@ static float sample_brdfcos_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
   if (brdf.roughness == 0) return 0;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return 0;
 }
 
@@ -757,37 +778,106 @@ static float sample_delta_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
   if (brdf.roughness != 0) return 0;
 
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return 0;
 }
 
 // Sample lights wrt solid angle
 static vec3f sample_lights(const pathtrace_scene* scene, const vec3f& position,
     float rl, float rel, const vec2f& ruv) {
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0};
 }
 
 // Sample lights pdf
 static float sample_lights_pdf(const pathtrace_scene* scene,
     const vec3f& position, const vec3f& direction) {
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return 0;
 }
 
 // Path tracing.
 static vec4f shade_path(const pathtrace_scene* scene, const ray3f& ray_,
     rng_state& rng, const pathtrace_params& params) {
-  // YOUR CODE GOES HERE ----------------------------------------------------
+  // YOUR CODE GOES HERE
+  // ----------------------------------------------------
   return {0, 0, 0, 0};
 }
 
-// Recursive path tracing USE OF PRODUCT FORMULATION
+//
+
+// Recursive path tracing.
 static vec4f shade_naive(const pathtrace_scene* scene, const ray3f& ray_,
-    rng_state& rng, const pathtrace_params& params) {
-  // YOUR CODE GOES HERE ----------------------------------------------------
-  return {0, 0, 0, 0};
+    rng_state& rng, const pathtrace_params& params) {  // seconda richiesta hw
+  // YOUR CODE GOES HERE
+
+  // init: variables of the loop: radiance and weight
+  auto l = zero3f, w = vec3f{1};
+
+  auto ray = ray_;
+
+  // control flow is organized over a loop which is expanding the path
+  for (auto bounce = 0; bounce < max(params.bounces, 4); bounce++) {
+    // intersection and evaluete the needed environment
+    auto isec = intersect_scene_bvh(scene, ray);
+    if (!isec.hit) {
+      l += w * eval_environment(scene, ray);
+      break;
+    }
+
+    // geometric part evaluated to the intersection location
+    // auto [p, n] = eval_point(isec);  // eval pos, norm
+    // auto [e, f] = eval_material(isec);  // eval brdf
+
+    // outgoing
+    auto o = -ray.d;
+
+    auto instance = scene->instances[isec.instance];
+
+    auto position = eval_position(instance, isec.element, isec.uv);
+    auto normal   = eval_shading_normal(
+        instance, isec.element, isec.uv, o);  // shading or classic?
+    auto emission = eval_emission(instance, isec.element, isec.uv, normal, o);
+    auto brdf     = eval_brdf(instance, isec.element, isec.uv, normal, o);
+
+    // handle opacity
+    if (brdf.opacity < 1 && rand1f(rng) >= brdf.opacity) {
+      ray = {position + ray.d * 1e-2f, ray.d};
+      bounce -= 1;
+      continue;
+    }
+
+    // handle emission: accumulate
+    auto i = o;
+    l += w * eval_emission(emission, normal, o);
+
+    // if brdf is a delta or not delta
+    if (!is_delta(brdf)) {  // sample smooth brdfs (fold cos into f)
+      auto i = sample_brdfcos(
+          brdf, normal, o, 0.f, rand2f(rng));  // incoming -> 0.f?????????
+      w *= eval_brdfcos(brdf, normal, i, o) /
+           sample_brdfcos_pdf(brdf, normal, i, o);
+
+    } else {  // sample sharp brdfs
+      auto i = sample_delta(brdf, normal, o, rand1f(rng));  // incoming
+      w *= eval_delta(brdf, normal, i, o) /
+           sample_delta_pdf(brdf, normal, i, o);
+    }
+
+    // russian roulette
+
+    if (rand1f(rng) >= min(1.0, max(w))) break;
+    w *= 1 / min(1.0, max(w));
+    // recurse: not real recursion!
+    ray = {position, i};
+  }
+  return {l.x, l.y, l.z};
 }
+//
+//
 
 // Eyelight for quick previewing.
 static vec4f shade_eyelight(const pathtrace_scene* scene, const ray3f& ray_,
