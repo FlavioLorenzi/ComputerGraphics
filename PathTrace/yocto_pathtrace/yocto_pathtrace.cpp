@@ -731,9 +731,36 @@ static vec3f eval_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
   if (brdf.roughness == 0) return zero3f;
 
-  // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0};
+  // YOUR CODE GOES HERE  terza richiesta
+  auto brdfcos = zero3f;
+  // Evaluate diffuse
+  if (mean(brdf.diffuse))
+    brdfcos += brdf.diffuse *
+               eval_diffuse_reflection(normal, outgoing, incoming);
+
+  // Evaluate specular
+  if (mean(brdf.specular))
+    brdfcos += brdf.specular * eval_microfacet_reflection(brdf.ior,
+                                   brdf.roughness, normal, outgoing, incoming);
+
+  // Evaluate metal
+  if (mean(brdf.metal))
+    brdfcos += brdf.metal * eval_microfacet_reflection(brdf.meta, brdf.metak,
+                                brdf.roughness, normal, outgoing, incoming);
+
+  // Evaluate transmission
+  if (mean(brdf.transmission))
+    brdfcos += brdf.transmission * eval_microfacet_transmission(brdf.ior,
+                                       brdf.roughness, normal, outgoing,
+                                       incoming);
+
+  // Evaluate refraction: extra point 1
+  /*if (brdf.refraction.x)
+    brdfcos += brdf.refraction * eval_microfacet_refraction(brdf.ior,
+                                     brdf.roughness, normal, outgoing,
+                                     incoming);*/
+
+  return brdfcos;
 }
 
 static vec3f eval_delta(const pathtrace_brdf& brdf, const vec3f& normal,
@@ -741,8 +768,29 @@ static vec3f eval_delta(const pathtrace_brdf& brdf, const vec3f& normal,
   if (brdf.roughness != 0) return zero3f;
 
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0};
+
+  auto delta = zero3f;
+  // Evaluate specular
+  if (mean(brdf.specular))
+    delta += brdf.specular *
+             eval_delta_reflection(brdf.ior, normal, outgoing, incoming);
+
+  // Evaluate metal
+  if (mean(brdf.metal))
+    delta += brdf.metal * eval_delta_reflection(brdf.meta, brdf.metak, normal,
+                              outgoing, incoming);
+
+  // Evaluate transmission
+  if (mean(brdf.transmission))
+    delta += brdf.transmission *
+             eval_delta_transmission(brdf.ior, normal, outgoing, incoming);
+
+  // Evaluate refraction: extra point 1
+  /*if (brdf.refraction.x)
+    delta += brdf.refraction *
+             eval_delta_refraction(brdf.ior, normal, outgoing, incoming);*/
+
+  return delta;
 }
 
 // Picks a direction based on the BRDF
@@ -751,8 +799,53 @@ static vec3f sample_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
   if (brdf.roughness == 0) return zero3f;
 
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0};
+  auto cdf = 0.0f;
+  if (brdf.diffuse_pdf) {
+    cdf += brdf.diffuse_pdf;
+    if (rnl < cdf) {
+      // Sample diffuse
+      return sample_diffuse_reflection(normal, outgoing, rn);
+    }
+  }
+
+  if (brdf.specular_pdf) {
+    cdf += brdf.specular_pdf;
+    if (rnl < cdf) {
+      // Sample specular
+      return sample_microfacet_reflection(
+          brdf.ior, brdf.roughness, normal, outgoing, rn);
+    }
+  }
+
+  if (brdf.metal_pdf) {
+    cdf += brdf.metal_pdf;
+    if (rnl < cdf) {
+      // Sample metal
+      return sample_microfacet_reflection(
+          brdf.meta, brdf.metak, brdf.roughness, normal, outgoing, rn);
+    }
+  }
+
+  if (brdf.transmission_pdf) {
+    cdf += brdf.transmission_pdf;
+    if (rnl < cdf) {
+      // Sample transmission
+      return sample_microfacet_transmission(
+          brdf.ior, brdf.roughness, normal, outgoing, rn);
+    }
+  }
+
+  // refraction: extra point 1
+  /*if (brdf.refraction_pdf) {
+    cdf += brdf.refraction_pdf;
+    if (rnl < cdf) {
+      // Sample refraction
+      return sample_microfacet_refraction(
+          brdf.ior, brdf.roughness, normal, outgoing, rnl, rn);
+    }
+  }*/
+
+  return zero3f;
 }
 
 static vec3f sample_delta(const pathtrace_brdf& brdf, const vec3f& normal,
@@ -760,8 +853,41 @@ static vec3f sample_delta(const pathtrace_brdf& brdf, const vec3f& normal,
   if (brdf.roughness != 0) return zero3f;
 
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0};
+  auto delta = 0.0f;
+  if (brdf.specular_pdf) {
+    delta += brdf.specular_pdf;
+    if (rnl < delta) {
+      // Sample specular
+      return sample_delta_reflection(brdf.ior, normal, outgoing);
+    }
+  }
+
+  if (brdf.metal_pdf) {
+    delta += brdf.metal_pdf;
+    if (rnl < delta) {
+      // Sample metal
+      return sample_delta_reflection(brdf.meta, brdf.metak, normal, outgoing);
+    }
+  }
+
+  if (brdf.transmission_pdf) {
+    delta += brdf.transmission_pdf;
+    if (rnl < delta) {
+      // Sample transmission
+      return sample_delta_transmission(brdf.ior, normal, outgoing);
+    }
+  }
+
+  // refraction extra point 1
+  /*if (brdf.refraction_pdf) {
+    delta += brdf.refraction_pdf;
+    if (rnl < delta) {
+      // Sample refreaction
+      return sample_delta_refraction(brdf.ior, normal, outgoing, rnl);
+    }
+  }*/
+
+  return zero3f;
 }
 
 // Compute the weight for sampling the BRDF
@@ -770,8 +896,37 @@ static float sample_brdfcos_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
   if (brdf.roughness == 0) return 0;
 
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return 0;
+
+  auto pdf = 0.0f;
+  // Sample pdf diffuse
+  if (brdf.diffuse_pdf)
+    pdf += brdf.diffuse_pdf *
+           sample_diffuse_reflection_pdf(normal, outgoing, incoming);
+
+  // Evaluate specular
+  if (brdf.specular_pdf)
+    pdf += brdf.specular_pdf * sample_microfacet_reflection_pdf(brdf.ior,
+                                   brdf.roughness, normal, outgoing, incoming);
+
+  // Evaluate metal
+  if (brdf.metal_pdf)
+    pdf += brdf.metal_pdf * sample_microfacet_reflection_pdf(brdf.meta,
+                                brdf.metak, brdf.roughness, normal, outgoing,
+                                incoming);
+
+  // Evaluate transmission
+  if (brdf.transmission_pdf)
+    pdf += brdf.transmission_pdf * sample_microfacet_transmission_pdf(brdf.ior,
+                                       brdf.roughness, normal, outgoing,
+                                       incoming);
+
+  // Evaluate refraction: extra point
+  /*if (brdf.refraction_pdf)
+    pdf += brdf.refraction_pdf * sample_microfacet_refraction_pdf(brdf.ior,
+                                     brdf.roughness, normal, outgoing,
+                                     incoming);*/
+
+  return pdf;
 }
 
 static float sample_delta_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
@@ -779,32 +934,202 @@ static float sample_delta_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
   if (brdf.roughness != 0) return 0;
 
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return 0;
+  auto delta_pdf = 0.0f;
+  // Evaluate specular
+  if (brdf.specular_pdf)
+    delta_pdf += brdf.specular_pdf * sample_delta_reflection_pdf(
+                                         brdf.ior, normal, outgoing, incoming);
+
+  // Evaluate metal
+  if (brdf.metal_pdf)
+    delta_pdf += brdf.metal_pdf * sample_delta_reflection_pdf(brdf.meta,
+                                      brdf.metak, normal, outgoing, incoming);
+
+  // Evaluate transmission
+  if (brdf.transmission_pdf)
+    delta_pdf += brdf.transmission_pdf * sample_delta_transmission_pdf(brdf.ior,
+                                             normal, outgoing, incoming);
+
+  // Evaluate refraction
+  if (brdf.refraction_pdf)
+    delta_pdf += brdf.refraction_pdf * sample_delta_refraction_pdf(brdf.ior,
+                                           normal, outgoing, incoming);
+
+  return delta_pdf;
 }
 
 // Sample lights wrt solid angle
 static vec3f sample_lights(const pathtrace_scene* scene, const vec3f& position,
     float rl, float rel, const vec2f& ruv) {
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0};
+  auto  lid   = sample_uniform(scene->lights.size(), rl);
+  auto& light = scene->lights[lid];
+
+  if (light->instance) {
+    // Handle object
+    auto tid = sample_discrete_cdf(light->cdf, rel);
+    auto uv  = sample_triangle(ruv);
+    auto lp  = eval_position(light->instance, tid, uv);
+
+    return normalize(lp - position);
+
+  } else if (light->environment) {
+    // Handle environment
+    auto texture = light->environment->emission_tex;
+    auto tid     = sample_discrete_cdf(light->cdf, rel);
+    auto size    = texture_size(texture);
+    auto uv      = vec2f{
+        (tid % size.x + ruv.x) / size.x, (tid / size.x + ruv.y) / size.y};
+
+    return transform_direction(light->environment->frame,
+        {cos(uv.x * 2 * pif) * sin(uv.y * pif), cos(uv.y * pif),
+            sin(uv.x * 2 * pif) * sin(uv.y * pif)});
+  } else
+    return vec3f{1, 1, 1};
 }
 
 // Sample lights pdf
 static float sample_lights_pdf(const pathtrace_scene* scene,
     const vec3f& position, const vec3f& direction) {
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return 0;
+  auto pdf = 0.0f;
+
+  for (auto light : scene->lights) {
+    if (light->instance) {
+      // Handle object
+      auto lpdf = 0.0f;
+      auto np   = position;  // New position
+
+      for (auto bounce = 0; bounce < 100; bounce++) {
+        auto intersection = intersect_instance_bvh(
+            light->instance, {np, direction});
+        if (!intersection.hit) {
+          break;
+        }
+
+        // Compute pdf of the triangle
+        auto lp = eval_position(
+            light->instance, intersection.element, intersection.uv);
+        auto ln = eval_normal(
+            light->instance, intersection.element, intersection.uv);
+        auto area = light->cdf.back();
+        lpdf += distance_squared(lp, position) /
+                (abs(dot(ln, direction)) * area);
+        // Update new position
+        np = lp + direction * 1e-3f;
+      }
+      pdf += lpdf;
+
+    } else if (light->environment) {
+      // Handle environment
+      auto texture = light->environment->emission_tex;
+      auto size    = texture_size(texture);
+      auto wl      = transform_direction(
+          inverse(light->environment->frame), direction);
+      auto texcoord = vec2f{
+          atan2(wl.z, wl.x) / (2 * pif), acos(clamp(wl.y, -1.0f, 1.0f)) / pif};
+      if (texcoord.x < 0) {
+        texcoord.x += 1;
+      }
+      auto i    = clamp((int)(texcoord.x * size.x), 0, size.x - 1);
+      auto j    = clamp((int)(texcoord.y * size.y), 0, size.y - 1);
+      auto prob = sample_discrete_cdf_pdf(light->cdf, j * size.x + i) /
+                  light->cdf.back();
+      auto angle = (2 * pif / size.x) * (pif / size.y) *
+                   sin(pif * (j + 0.5f) / size.y);
+      pdf += prob / angle;
+    }
+  }
+  pdf *= sample_uniform_pdf(scene->lights.size());
+
+  return pdf;
 }
 
 // Path tracing.
 static vec4f shade_path(const pathtrace_scene* scene, const ray3f& ray_,
     rng_state& rng, const pathtrace_params& params) {
   // YOUR CODE GOES HERE
-  // ----------------------------------------------------
-  return {0, 0, 0, 0};
+  auto light   = zero3f;
+  auto weights = vec3f{1, 1, 1};
+  auto ray     = ray_;
+
+  for (auto bounce = 0; bounce < params.bounces; bounce++) {
+    auto intersection = intersect_scene_bvh(scene, ray);
+    // Check for intersection
+    if (!intersection.hit) {
+      light += weights * eval_environment(scene, ray);
+      break;
+    }
+
+    auto object   = scene->instances[intersection.instance];
+    auto outgoing = -ray.d;
+    // Initialize incoming direction
+    auto incoming = outgoing;
+
+    // Evaluate: new position
+    auto position = eval_position(
+        object, intersection.element, intersection.uv);
+    // Normal
+    auto normal = eval_shading_normal(
+        object, intersection.element, intersection.uv, outgoing);
+    // Material brdf = bdsf
+    auto f = eval_brdf(
+        object, intersection.element, intersection.uv, normal, outgoing);
+    // Emission
+    auto e = eval_emission(
+        object, intersection.element, intersection.uv, normal, outgoing);
+
+    // handle opacity
+    if (f.opacity < 1 && rand1f(rng) >= f.opacity) {
+      ray = {position + ray.d * 1e-2f, ray.d};
+      bounce -= 1;
+      continue;
+    }
+
+    // Increase light value
+    light += weights * eval_emission(e, normal, outgoing);
+
+    // Sample smooth brdfs
+    if (!is_delta(f)) {
+      // Update the incoming direction
+      if (rand1f(rng) < 0.5f) {
+        incoming = sample_brdfcos(
+            f, normal, outgoing, rand1f(rng), rand2f(rng));
+      } else {
+        incoming = sample_lights(
+            scene, position, rand1f(rng), rand1f(rng), rand2f(rng));
+      }
+      // Update weights
+      weights *= eval_brdfcos(f, normal, outgoing, incoming) * 2 /
+                 (sample_brdfcos_pdf(f, normal, outgoing, incoming) +
+                     sample_lights_pdf(scene, position, incoming));
+    } else {  // Sample sharp brdfs
+      // Update the incoming direction
+      incoming = sample_delta(f, normal, outgoing, rand1f(rng));
+      // Update weights
+      weights *= eval_delta(f, normal, outgoing, incoming) /
+                 sample_delta_pdf(f, normal, outgoing, incoming);
+    }
+
+    if (weights == zero3f || !isfinite(weights)) {
+      break;
+    }
+
+    // russian roulette
+    if (max(weights) < 1 && bounce > 6) {
+      // auto rr_prob = max(0.05f, 1 - max(weights));
+      auto rr_prob = min(1.0f, max(weights));
+      if (rand1f(rng) > rr_prob) {
+        break;
+      }
+      // Update weights
+      weights *= 1 / rr_prob;
+    }
+
+    // Recurse with a new ray
+    ray = {position, incoming};
+  }
+  return {light.x, light.y, light.z, 1};
 }
 
 //
@@ -815,9 +1140,12 @@ static vec4f shade_naive(const pathtrace_scene* scene, const ray3f& ray_,
   // YOUR CODE GOES HERE
 
   // init: variables of the loop: radiance and weight
-  auto l = zero3f, w = vec3f{1};
-
+  auto l = zero3f, w = vec3f{1, 1, 1};
   auto ray = ray_;
+
+  // NB: vedi shade_eyelight
+
+  auto hit = false;
 
   // control flow is organized over a loop which is expanding the path
   for (auto bounce = 0; bounce < max(params.bounces, 4); bounce++) {
@@ -849,32 +1177,42 @@ static vec4f shade_naive(const pathtrace_scene* scene, const ray3f& ray_,
       bounce -= 1;
       continue;
     }
+    hit = true;
 
     // handle emission: accumulate
-    auto i = o;
+    auto i = -o;  // incoming = -outgoing
     l += w * eval_emission(emission, normal, o);
 
     // if brdf is a delta or not delta
     if (!is_delta(brdf)) {  // sample smooth brdfs (fold cos into f)
-      auto i = sample_brdfcos(
-          brdf, normal, o, 0.f, rand2f(rng));  // incoming -> 0.f?????????
+      i = sample_brdfcos(brdf, normal, o, rand1f(rng), rand2f(rng));
       w *= eval_brdfcos(brdf, normal, i, o) /
            sample_brdfcos_pdf(brdf, normal, i, o);
 
     } else {  // sample sharp brdfs
-      auto i = sample_delta(brdf, normal, o, rand1f(rng));  // incoming
+      i = sample_delta(brdf, normal, o, rand1f(rng));
       w *= eval_delta(brdf, normal, i, o) /
            sample_delta_pdf(brdf, normal, i, o);
     }
 
-    // russian roulette
+    // check over the weight:
+    if (w == zero3f || !isfinite(w)) break;
 
-    if (rand1f(rng) >= min(1.0, max(w))) break;
-    w *= 1 / min(1.0, max(w));
+    // russian roulette old version:
+    /*if (rand1f(rng) >= min(1.0, max(w))) break;
+    w *= 1 / min(1.0, max(w));*/
+
+    // russian roulette new version:
+    if (max(w) < 1 && bounce > 3) {
+      auto pr = min(1.0, max(w));
+      if (rand1f(rng) > pr) break;
+      w *= 1 / pr;
+    }
+
     // recurse: not real recursion!
     ray = {position, i};
   }
-  return {l.x, l.y, l.z};
+  return {l.x, l.y, l.z, 1};
 }
 //
 //
