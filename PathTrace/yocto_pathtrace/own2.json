@@ -1,0 +1,116 @@
+{
+  "asset": {
+    "copyright": "Model by Fabio Pellacini from github.com/~xelatihy/yocto-gl"
+  },
+  "cameras": {
+    "default": {
+      "lens": 0.05,
+      "aperture": 0.0,
+      "aspect": 2.4,
+      "lookat": [-0.75, 0.4, 1.7, -0.075, 0.05, 0.5, 0, 1, 0]
+    }
+  },
+  "environments": {
+    "sky": {
+      "emission": [1, 1, 1],
+      "emission_tex": "sky"
+    }
+  },
+  "instances": {
+    "floor": {
+      "shape": "floor",
+      "material": "floor"
+    },
+    "arealight1": {
+      "shape": "arealight1",
+      "lookat": [-0.4, 0.8, 0.8, 0, 0.1, 0, 0, 1, 0],
+      "material": "arealight1"
+    },
+    "arealight2": {
+      "shape": "arealight2",
+      "lookat": [0.4, 0.8, 0.8, 0, 0.1, 0, 0, 1, 0],
+      "material": "arealight2"
+    },
+   
+    "car1": {
+      "shape": "car",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0.09],
+      "material": "car1"
+    },
+    "car2": {
+      "shape": "car",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.01, 0],
+      "material": "car2"
+    },
+    "car3": {
+      "shape": "car",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 0.01, 0.19],
+      "material": "car3"
+    },
+    "bugatti1": {
+      "shape": "bugatti",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.01, 0.6],
+      "material": "bugatti1"
+    },
+    "bugatti2": {
+      "shape": "bugatti",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0.7],
+      "material": "bugatti2"
+    },
+    "bugatti3": {
+      "shape": "bugatti",
+      "frame": [1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0.01, 0.5],
+      "material": "bugatti3"
+    }
+    
+  },
+  "materials": {
+    "floor": {
+      "color": [0.7, 0.7, 0.7],
+      "color_tex": "grass"
+    },
+    "arealight1": {
+      "emission": [20, 20, 20]
+    },
+    "arealight2": {
+      "emission": [20, 20, 20]
+    },
+    "car1": {
+       "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "uvgrid"
+    },
+    "car2": {
+       "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "lava"
+      },
+    "car3": {
+      "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "yr"
+      },
+      "bugatti1": {
+      "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "uvgrid"
+      },
+      "bugatti2": {
+      "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "yr"
+      },
+      "bugatti3": {
+      "specular": 0,
+      "color": [1, 1, 1],
+      "roughness": 0,
+      "color_tex": "lava"
+      }
+      
+  }
+}
