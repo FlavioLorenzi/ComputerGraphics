@@ -974,32 +974,30 @@ static float sample_delta_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
 static vec3f sample_lights(const pathtrace_scene* scene, const vec3f& position,
     float rl, float rel, const vec2f& ruv) {
   // YOUR CODE GOES HERE
-  auto light_id = sample_uniform(scene->lights.size(), rl);
-  auto light    = scene->lights[light_id];
-
+  auto  light_id = sample_uniform(scene->lights.size(), rl);
+  auto& light    = scene->lights[light_id];
   if (light->instance) {
-    // Handle object : take random tri and uv
-    auto triangle_id = sample_discrete_cdf(light->cdf, rel);
-    auto uv          = sample_triangle(ruv);
-    // geometry, compute position on the light, set direction
-    auto instance       = scene->instances[triangle_id];
-    auto light_position = eval_position(instance, triangle_id, uv);
-    return normalize(light_position - position);
-
+    // handle objects
+    auto element   = sample_discrete_cdf(light->cdf, rel);
+    auto uv        = sample_triangle(ruv);
+    auto lposition = eval_position(light->instance, element, uv);
+    return normalize(lposition - position);
   } else if (light->environment) {
-    // Handle environment
-    auto texture   = light->environment->emission_tex;
-    auto texel_id  = sample_discrete_cdf(light->cdf, rel);
-    auto text_size = texture_size(texture);
-    auto uv        = vec2f{(texel_id % text_size.x + ruv.x) / text_size.x,
-        (texel_id % text_size.y + ruv.y) / text_size.y};
-
-    return transform_direction(light->environment->frame,
-        {cos(uv.x * 2 * pif) * sin(uv.y * pif), cos(uv.y * pif),
-            sin(uv.x * 2 * pif) * sin(uv.y * pif)});
+    if (light->environment->emission_tex) {
+      // handle env
+      auto emission_tex = light->environment->emission_tex;
+      auto tid          = sample_discrete_cdf(light->cdf, rel);
+      auto size         = texture_size(emission_tex);
+      auto uv           = vec2f{
+          (tid % size.x + ruv.x) / size.x, (tid / size.x + ruv.y) / size.y};
+      return transform_direction(light->environment->frame,
+          {cos(uv.x * 2 * pif) * sin(uv.y * pif), cos(uv.y * pif),
+              sin(uv.x * 2 * pif) * sin(uv.y * pif)});
+    } else {
+      return sample_sphere(ruv);
+    }
   }
-
-  return {0.f, 0.f, 0.f};
+  return zero3f;
 }
 
 // Sample lights pdf
@@ -1007,7 +1005,6 @@ static float sample_lights_pdf(const pathtrace_scene* scene,
     const vec3f& position, const vec3f& direction) {
   // YOUR CODE GOES HERE
   auto pdf = 0.0f;
-
   for (auto light : scene->lights) {
     if (light->instance) {
       // Handle object
@@ -1035,23 +1032,27 @@ static float sample_lights_pdf(const pathtrace_scene* scene,
       pdf += lpdf;
 
     } else if (light->environment) {
-      // Handle environment
-      auto texture = light->environment->emission_tex;
-      auto size    = texture_size(texture);
-      auto wl      = transform_direction(
-          inverse(light->environment->frame), direction);
-      auto texcoord = vec2f{
-          atan2(wl.z, wl.x) / (2 * pif), acos(clamp(wl.y, -1.0f, 1.0f)) / pif};
-      if (texcoord.x < 0) {
-        texcoord.x += 1;
+      if (light->environment->emission_tex) {
+        // Handle environment
+        auto texture = light->environment->emission_tex;
+        auto size    = texture_size(texture);
+        auto wl      = transform_direction(
+            inverse(light->environment->frame), direction);
+        auto texcoord = vec2f{atan2(wl.z, wl.x) / (2 * pif),
+            acos(clamp(wl.y, -1.0f, 1.0f)) / pif};
+        if (texcoord.x < 0) {
+          texcoord.x += 1;
+        }
+        auto i    = clamp((int)(texcoord.x * size.x), 0, size.x - 1);
+        auto j    = clamp((int)(texcoord.y * size.y), 0, size.y - 1);
+        auto prob = sample_discrete_cdf_pdf(light->cdf, j * size.x + i) /
+                    light->cdf.back();
+        auto angle = (2 * pif / size.x) * (pif / size.y) *
+                     sin(pif * (j + 0.5f) / size.y);
+        pdf += prob / angle;
+      } else {
+        pdf += 1 / (4 * pif);
       }
-      auto i    = clamp((int)(texcoord.x * size.x), 0, size.x - 1);
-      auto j    = clamp((int)(texcoord.y * size.y), 0, size.y - 1);
-      auto prob = sample_discrete_cdf_pdf(light->cdf, j * size.x + i) /
-                  light->cdf.back();
-      auto angle = (2 * pif / size.x) * (pif / size.y) *
-                   sin(pif * (j + 0.5f) / size.y);
-      pdf += prob / angle;
     }
   }
   pdf *= sample_uniform_pdf(scene->lights.size());
@@ -1063,88 +1064,88 @@ static float sample_lights_pdf(const pathtrace_scene* scene,
 static vec4f shade_path(const pathtrace_scene* scene, const ray3f& ray_,
     rng_state& rng, const pathtrace_params& params) {
   // YOUR CODE GOES HERE
+  auto radiance = zero3f;
+  auto w        = vec3f{1.f, 1.f, 1.f};
+  auto ray      = ray_;
 
-  auto light   = zero3f;
-  auto weights = vec3f{1, 1, 1};
-  auto ray     = ray_;
+  // Alpha channel
+  bool hit = false;
 
-  for (auto bounce = 0; bounce < params.bounces; bounce++) {
-    auto intersection = intersect_scene_bvh(scene, ray);
+  for (auto bounce = 0; bounce < max(params.bounces, 4); bounce++) {
     // Check for intersection
-    if (!intersection.hit) {
-      light += weights * eval_environment(scene, ray);
-      break;
-    }
+    auto isec = intersect_scene_bvh(scene, ray);
 
-    auto object   = scene->instances[intersection.instance];
+    // If no object is hitted, then return the environment radiance
+    if (!isec.hit)
+      return rgb_to_rgba(w) * rgb_to_rgba(eval_environment(scene, ray));
+
+    // Geometry and other stuff
+    auto instance = scene->instances[isec.instance];
+    auto shape    = instance->shape;
+    auto material = instance->material;
+    auto uv       = isec.uv;
+    auto element  = isec.element;
     auto outgoing = -ray.d;
-    // Initialize incoming direction
-    auto incoming = outgoing;
+    auto normal   = eval_shading_normal(instance, element, uv, outgoing);
+    auto position = eval_position(instance, element, uv);
 
-    // Evaluate: new position
-    auto position = eval_position(
-        object, intersection.element, intersection.uv);
-    // Normal
-    auto normal = eval_shading_normal(
-        object, intersection.element, intersection.uv, outgoing);
-    // Material brdf = bdsf
-    auto f = eval_brdf(
-        object, intersection.element, intersection.uv, normal, outgoing);
-    // Emission
-    auto e = eval_emission(
-        object, intersection.element, intersection.uv, normal, outgoing);
+    // Evaluate the brdf
+    auto brdf = eval_brdf(instance, isec.element, isec.uv, normal, outgoing);
+
+    // Eval emission
+    radiance += w * eval_emission(
+                        instance, isec.element, isec.uv, normal, outgoing);
+
+    // brdf * light
+    auto incoming = zero3f;
 
     // handle opacity
-    if (f.opacity < 1 && rand1f(rng) >= f.opacity) {
+    if (brdf.opacity < 1 && rand1f(rng) >= brdf.opacity) {
       ray = {position + ray.d * 1e-2f, ray.d};
       bounce -= 1;
       continue;
     }
 
-    // Increase light value
-    light += weights * eval_emission(e, normal, outgoing);
+    // Setup the alpha channel
+    hit = true;
 
-    // Sample smooth brdfs
-    if (!is_delta(f)) {
-      // Update the incoming direction
+    // Sample smooth brdf
+    if (!is_delta(brdf)) {
       if (rand1f(rng) < 0.5f) {
         incoming = sample_brdfcos(
-            f, normal, outgoing, rand1f(rng), rand2f(rng));
+            brdf, normal, outgoing, rand1f(rng), rand2f(rng));
       } else {
         incoming = sample_lights(
             scene, position, rand1f(rng), rand1f(rng), rand2f(rng));
       }
-      // Update weights
-      weights *= eval_brdfcos(f, normal, outgoing, incoming) * 2 /
-                 (sample_brdfcos_pdf(f, normal, outgoing, incoming) +
-                     sample_lights_pdf(scene, position, incoming));
-    } else {  // Sample sharp brdfs
-      // Update the incoming direction
-      incoming = sample_delta(f, normal, outgoing, rand1f(rng));
-      // Update weights
-      weights *= eval_delta(f, normal, outgoing, incoming) /
-                 sample_delta_pdf(f, normal, outgoing, incoming);
+      // update weight
+      w *= eval_brdfcos(brdf, normal, outgoing, incoming) * 2 /
+           (sample_brdfcos_pdf(brdf, normal, outgoing, incoming) +
+               sample_lights_pdf(scene, position, incoming));
+    } else {
+      // Sample sharp brdf
+      incoming = sample_delta(brdf, normal, outgoing, rand1f(rng));
+      // update weight
+      w *= eval_delta(brdf, normal, outgoing, incoming) /
+           sample_delta_pdf(brdf, normal, outgoing, incoming);
     }
 
-    if (weights == zero3f || !isfinite(weights)) {
-      break;
+    // Just a check on the weights
+    if (w == zero3f || !isfinite(w)) break;
+
+    // Russian roulette
+    if (bounce > 3) {
+      auto rr_t = min(1.f, max(w));
+      if (rand1f(rng) >= rr_t) break;
+      w *= 1 / rr_t;
     }
 
-    // russian roulette
-    if (max(weights) < 1 && bounce > 6) {
-      // auto rr_prob = max(0.05f, 1 - max(weights));
-      auto rr_prob = min(1.0f, max(weights));
-      if (rand1f(rng) > rr_prob) {
-        break;
-      }
-      // Update weights
-      weights *= 1 / rr_prob;
-    }
-
-    // Recurse with a new ray
+    // Simply setup the new ray
     ray = {position, incoming};
   }
-  return {light.x, light.y, light.z, 1};
+
+  // Return the final radiance taking into account the alpha channel
+  return {radiance.x, radiance.y, radiance.z, hit ? 1.f : 0.f};
 }
 
 //
@@ -1217,9 +1218,11 @@ static vec4f shade_naive(const pathtrace_scene* scene, const ray3f& ray_,
     if (w == zero3f || !isfinite(w)) break;
 
     // Russian roulette
-    auto rr_t = min(1.f, max(w));
-    if (rand1f(rng) >= rr_t) break;
-    w *= 1 / rr_t;
+    if (bounce > 3) {
+      auto rr_t = min(1.f, max(w));
+      if (rand1f(rng) >= rr_t) break;
+      w *= 1 / rr_t;
+    }
 
     // Simply setup the new ray
     ray = {position, incoming};
