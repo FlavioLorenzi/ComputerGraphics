@@ -8,15 +8,33 @@ Three homeworks (Raytracing, to do, to do) and final project (to do).
 Tools we used: C++, Visual Studio Code, CMake, gcc and ninja.
 
 # Raytracing
-First part: implementing images with own colors, textures... as we can see here:
+First part: implement images with own colors, textures... as we can see here:
 ![](Raytrace/out/lowres/03_texture_720_256.jpg)
 
-Second part: implementation of raytracing shader, with refraction for non-thin materials.
+Second part: implementn of raytracing shader, with refraction for non-thin materials.
 ![](Raytrace/out/Refraction/glass_(notThin).jpg)
 
-Third part: implementing previous images with a cartoon shader.
+Third part: implement previous images with a cartoon shader.
 ![](Raytrace/out/shade_cartoon/materialsb.png)
 
 
 
 # Pathtracing
+First part: implement naive pathtracing and refraction
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+
+Second part: implement the pathtrace with lights
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+
+Third part: creation of personal scenes to render 
+![](Raytrace/out/lowres/03_texture_720_256.jpg) 
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+
+Fourt part: test the pathtrace on large scenes to see the effects of the lights
+![](Raytrace/out/lowres/03_texture_720_256.jpg)
+
+
+# Volumetric Pathtracing and HairShading
