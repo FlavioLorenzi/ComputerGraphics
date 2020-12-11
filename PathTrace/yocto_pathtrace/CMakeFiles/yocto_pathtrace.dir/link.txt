@@ -1,0 +1,2 @@
+/usr/bin/ar qc ../../bin/libyocto_pathtrace.a  CMakeFiles/yocto_pathtrace.dir/yocto_pathtrace.cpp.o
+/usr/bin/ranlib ../../bin/libyocto_pathtrace.a
