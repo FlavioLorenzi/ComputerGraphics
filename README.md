@@ -21,12 +21,12 @@ Third part: implement previous images with a cartoon shader.
 
 # Pathtracing
 First part: implement naive pathtracing and refraction
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](PathTrace/out/naive/03_texture_720_256.jpg)
+![](PathTrace/out/Refraction/naive.jpg)
 
 Second part: implement the pathtrace with lights
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](PathTrace/out/naive/03_texture_720_256.jpg)
+![](PathTrace/out/naive/03_texture_720_256.jpg)
 
 Third part: creation of personal scenes to render 
 ![](Raytrace/out/lowres/03_texture_720_256.jpg) 
