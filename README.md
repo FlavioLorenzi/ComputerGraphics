@@ -29,12 +29,12 @@ Second part: implement the pathtrace with lights
 ![](PathTrace/out/path/15_classroom_720_256.jpg)
 
 Third part: creation of personal scenes to render 
-![](Raytrace/out/lowres/03_texture_720_256.jpg) 
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](PathTrace/out/OwnScenes/1own.png) 
+![](PathTrace/out/OwnScenes/2own.png)
+![](PathTrace/out/OwnScenes/2own.png)
 
 Fourt part: test the pathtrace on large scenes to see the effects of the lights
-![](Raytrace/out/lowres/03_texture_720_256.jpg)
+![](PathTrace/out/La/03_texture_720_256.jpg)
 
 
 # Volumetric Pathtracing and HairShading
