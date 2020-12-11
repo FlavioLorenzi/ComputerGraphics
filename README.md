@@ -23,7 +23,7 @@ Third part: implement previous images with a cartoon shader.
 # Pathtracing
 First part: implement naive pathtracing and refraction
 ![](PathTrace/out/naive/02_matte_720_256.jpg)
-![](PathTrace/out/Refraction/path.jpg)
+![](PathTrace/out/Refraction/naive.jpg)
 
 Second part: implement the pathtrace with lights
 ![](PathTrace/out/path/15_classroom_720_256.jpg)
