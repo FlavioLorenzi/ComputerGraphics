@@ -26,6 +26,7 @@ First part: implement naive pathtracing and refraction
 ![](PathTrace/out/Refraction/naive.jpg)
 
 Second part: implement the pathtrace with lights
+![](PathTrace/out/path/01_cornellbox_512_256.jpg)
 ![](PathTrace/out/path/15_classroom_720_256.jpg)
 
 Third part: creation of personal scenes to render 
