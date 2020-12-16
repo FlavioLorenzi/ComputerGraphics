@@ -47,4 +47,6 @@ Fourt part: test the pathtrace on large scenes to see the effects of the lights
 
 
 
-## Volumetric pathtracing and hairshading
+## Volumetric pathtracing 
+
+## Hairshading
