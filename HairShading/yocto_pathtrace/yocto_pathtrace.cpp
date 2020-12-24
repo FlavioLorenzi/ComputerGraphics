@@ -35,22 +35,20 @@
 #include <yocto/yocto_shading.h>
 #include <yocto/yocto_shape.h>
 
-// hairshading step 1: import library as in the original paper work
-//#include <numeric>
-
 // -----------------------------------------------------------------------------
 // IMPLEMENTATION FOR SCENE EVALUATION
 // -----------------------------------------------------------------------------
 namespace yocto {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-// hairshading step 2
+// hairshading step 1
 // init the base params for geometry of HairBSDF
 static const int   pMax = 3;      // segments of scattered light: check eval
 const float        h    = 0.0f;   // [-1,1] offset along the curve width
-static const float eta  = 1.75f;  // refraction index for hair interior
-vec3f sigma = {2.9, 5.1, 10.2};   // absorption coefficient (+=black, -=white)
-static const float beta_m = 0.125f;  // longitudinal hair roughness
+static const float eta  = 1.65f;  // refraction index for hair interior
+
+vec3f sigma = {0.09, 0.3, 2.6};      // absorption coefficient(+=black,-=white)
+static const float beta_m = 0.15f;   // longitudinal hair roughness
 static const float beta_n = 0.3f;    // azimuthal hair roughness
 float sin2kAlpha[3], cos2kAlpha[3];  // angles where scales are offset
 
@@ -881,6 +879,7 @@ static vec3f eval_delta(const pathtrace_brdf& brdf, const vec3f& normal,
   return brdfcos;
 }
 
+//// Commentato quello classico, riscritto modificato in basso
 /*
 // Picks a direction based on the BRDF
 static vec3f sample_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
@@ -927,8 +926,8 @@ static vec3f sample_brdfcos(const pathtrace_brdf& brdf, const vec3f& normal,
 */
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-// hairshading step3
-// Given the paper work here there is an adaptation of it
+// hairshading step2
+// Given the paper work code here there is an adaptation of it
 inline float Sqr(float v) { return v * v; }
 
 inline float Phi(int p, float gammaO, float gammaT) {
@@ -973,7 +972,8 @@ static std::array<vec3f, pMax + 1> Ap(
   for (int p = 2; p < pMax; ++p) ap[p] = ap[p - 1] * T * f;
 
   // Compute attenuation term accounting for remaining orders of scattering
-  // ap[pMax] = ap[pMax - 1] * f * T / (vec3f(1.f) - T * f); //error1
+  ap[pMax] = ap[pMax - 1] * f * T / (vec3f{1.f, 1.f, 1.f} - T * f);
+
   return ap;
 }
 inline float I0(float x) {
@@ -1117,9 +1117,9 @@ std::array<float, pMax + 1> ComputeApPdf(float cosThetaO, float roughness) {
 
   // Compute $A_p$ PDF from individual $A_p$ terms
   std::array<float, pMax + 1> apPdf;
-  // float sumY = accumulate(ap.begin(), ap.end(), float(0),
-  //[](float s, const vec3f& ap) { return s + ap.y; }); // error2
-  for (int i = 0; i <= pMax; ++i) apPdf[i] = ap[i].y;  //  / sumY;
+  float                       sumY = 0.f;
+  for (int i = 0; i <= pMax; ++i) sumY += luminance(ap[i]);
+  for (int i = 0; i <= pMax; ++i) apPdf[i] = luminance(ap[i]) / sumY;
   return apPdf;
 }
 
@@ -1275,7 +1275,7 @@ static vec3f sample_delta(const pathtrace_brdf& brdf, const vec3f& normal,
   return zero3f;
 }
 
-// Compute the weight for sampling the BRDF
+//// Commentato quello classico, riscritto modificato in basso
 /*
 static float sample_brdfcos_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming) {
@@ -1319,6 +1319,7 @@ static float sample_brdfcos_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
 /////////////////////////7777  hair brdf 2 ////////////////////////////
 ///////////////////////////////////////////////////////////////////7
 
+// Compute the weight for sampling the BRDF
 static float sample_brdfcos_pdf(const pathtrace_brdf& brdf, const vec3f& normal,
     const vec3f& outgoing, const vec3f& incoming, const vec2f& rn) {
   // Compute hair coordinate system terms related to _wo_
