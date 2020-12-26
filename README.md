@@ -12,6 +12,8 @@ In 3D computer graphics, ray tracing is a rendering technique for generating an 
 
 
 First part: basic implementation for images with own colors, textures evalation, camera ecc... as following:
+
+
 ![](Raytrace/out/lowres/03_texture_720_256.jpg)
 
 Second part: implement the raytracing shader, with refraction for non-thin materials.
@@ -57,8 +59,8 @@ Fourt part: test the pathtrace on large scenes to see the effects of the lights
 Volumetric path tracing method enhances the rendering of the lighting in a scene by extending the path tracing method with the effect of light scattering. It is used for photorealistic effects of participating media like fire, explosions, smoke, clouds, fog or soft shadows. Like in the path tracing method, a ray gets followed backwards, beginning from the eye, until reaching the light source. In volumetric path tracing, scattering events can occur alongside with ray tracing. When a light ray hits a surface, a certain amount gets scattered into the media.
 
 The work includes an implementation of the Catmull-Clark subdivision surface algorithm, a normal_mapping method and the shader volpath, modifying the previous path shader, as described in the slides. I obtained the following results:
-![](PathTrace/out/OwnScenes/2own.png)
-![](PathTrace/out/OwnScenes/3own.png)
+![](VolumetricPath/out/highres/01_surface_1280_1024.jpg)
+![](VolumetricPath/out/highres/04_head1_1280_1024.jpg)
 
 
 ## Hair shading (BSDF for a more realistic-looking hairs)
@@ -66,6 +68,6 @@ This section is well described in the report.pdf
 
 
 some results are showed following:
-![](PathTrace/out/OwnScenes/2own.png)
-![](PathTrace/out/OwnScenes/3own.png)
-
+![](HairShading/out/azimuthil_scattering/1first.jpg)
+![](HairShading/out/azimuthil_scattering/2second.jpg)
+![](HairShading/out/azimuthil_scattering/3third.jpg)
