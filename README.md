@@ -14,7 +14,7 @@ In 3D computer graphics, ray tracing is a rendering technique for generating an 
 First part: basic implementation for images with own colors, textures evalation, camera ecc... as following:
 ![](Raytrace/out/lowres/03_texture_720_256.jpg)
 
-Second part: implementn of raytracing shader, with refraction for non-thin materials.
+Second part: implement the raytracing shader, with refraction for non-thin materials.
 ![](Raytrace/out/Refraction/glass_(notThin).jpg)
 
 Third part: implement previous images with a cartoon shader.
@@ -24,6 +24,9 @@ Third part: implement previous images with a cartoon shader.
 
 
 ## Pathtracing
+Path tracing is a Monte Carlo method of rendering images of three-dimensional scenes such that the global illumination is faithful to reality. Fundamentally, the algorithm is integrating over all the illuminance arriving to a single point on the surface of an object. This illuminance is then reduced by a surface reflectance function (BRDF) to determine how much of it will go towards the viewpoint camera. This integration procedure is repeated for every pixel in the output image. When combined with physically accurate models of surfaces, accurate models of real light sources (light bulbs), and optically correct cameras, path tracing can produce still images that are indistinguishable from photographs.
+
+
 First part: implement naive pathtracing and refraction
 
 ![](PathTrace/out/naive/02_matte_720_256.jpg)
@@ -51,5 +54,18 @@ Fourt part: test the pathtrace on large scenes to see the effects of the lights
 
 
 ## Volumetric pathtracing 
+Volumetric path tracing method enhances the rendering of the lighting in a scene by extending the path tracing method with the effect of light scattering. It is used for photorealistic effects of participating media like fire, explosions, smoke, clouds, fog or soft shadows. Like in the path tracing method, a ray gets followed backwards, beginning from the eye, until reaching the light source. In volumetric path tracing, scattering events can occur alongside with ray tracing. When a light ray hits a surface, a certain amount gets scattered into the media.
 
-## Hairshading
+The work includes an implementation of the Catmull-Clark subdivision surface algorithm, a normal_mapping method and the shader volpath, modifying the previous path shader, as described in the slides. I obtained the following results:
+![](PathTrace/out/OwnScenes/2own.png)
+![](PathTrace/out/OwnScenes/3own.png)
+
+
+## Hair shading (BSDF for a more realistic-looking hairs)
+This section is well described in the report.pdf 
+
+
+some results are showed following:
+![](PathTrace/out/OwnScenes/2own.png)
+![](PathTrace/out/OwnScenes/3own.png)
+
