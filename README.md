@@ -13,13 +13,14 @@ In 3D computer graphics, ray tracing is a rendering technique for generating an 
 
 First part: basic implementation for images with own colors, textures evalation, camera ecc... as following:
 
-
 ![](Raytrace/out/lowres/03_texture_720_256.jpg)
 
 Second part: implement the raytracing shader, with refraction for non-thin materials.
+
 ![](Raytrace/out/Refraction/glass_(notThin).jpg)
 
 Third part: implement previous images with a cartoon shader.
+
 ![](Raytrace/out/shade_cartoon/materialsb.png)
 .
 
