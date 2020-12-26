@@ -11,7 +11,7 @@ Tools we used: C++, Visual Studio Code, CMake, gcc and ninja.
 In 3D computer graphics, ray tracing is a rendering technique for generating an image by tracing the path of light as pixels in an image plane and simulating the effects of its encounters with virtual objects. The technique is capable of producing a high degree of visual realism, more so than typical scanline rendering methods, but at a greater computational cost. This makes ray tracing best suited for applications where taking a relatively long time to render can be tolerated, such as in still computer-generated images, and film and television visual effects (VFX), but generally more poorly suited to real-time applications such as video games, where speed is critical in rendering each frame. Ray tracing is capable of simulating a variety of optical effects, such as reflection and refraction, scattering, and dispersion phenomena (such as chromatic aberration).
 
 
-First part: implement images with own colors, textures... as we can see here:
+First part: basic implementation for images with own colors, textures evalation, camera ecc... as following:
 ![](Raytrace/out/lowres/03_texture_720_256.jpg)
 
 Second part: implementn of raytracing shader, with refraction for non-thin materials.
