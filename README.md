@@ -3,9 +3,9 @@
 
 AIRO course of Fundamentals for Computer Graphics:
 
-Three homeworks (Raytracing, to do, to do) and final project (to do).
+Three homeworks (Raytracing, Pathtracing, Volumetric Pathtracing) and the Hair Shading final extrapoint.
 
-Tools we used: C++, Visual Studio Code, CMake, gcc and ninja.
+Tools I used: C++, Visual Studio Code, CMake, gcc and ninja.
 
 NB: The "OwnScene" task is accomplished with the use of Blender software: in particular objects are imported, modeled and finally exported as ply files; then they are inserted in the YoctoGL scene structure, characterized by json files that recall ply and texture (jpg) files.
 
