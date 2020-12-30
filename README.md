@@ -71,6 +71,8 @@ This section is well described in the report.pdf
 
 
 some results are showed following:
+
+
 ![](HairShading/out/azimuthil_scattering/1first.jpg)
 ![](HairShading/out/azimuthil_scattering/2second.jpg)
 ![](HairShading/out/azimuthil_scattering/3third.jpg)
