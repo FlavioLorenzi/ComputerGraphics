@@ -69,7 +69,7 @@ The work includes an implementation of the Catmull-Clark subdivision surface alg
 ## Hair shading (BSDF for a more realistic-looking hairs)
 This section is well described in the [report](HairShading/Report.pdf).
 
-
+The goal of the project is to integrate the model implemented by [pbrt](https://www.pbrt.org/hair.pdf), suited for hair rendering in production, in the Yocto library.
 Some results are showed following:
 
 
