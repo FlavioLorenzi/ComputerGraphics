@@ -67,10 +67,10 @@ The work includes an implementation of the Catmull-Clark subdivision surface alg
 
 
 ## Hair shading (BSDF for a more realistic-looking hairs)
-This section is well described in the [report](HairShading/Report.pdf)
+This section is well described in the [report](HairShading/Report.pdf).
 
 
-some results are showed following:
+Some results are showed following:
 
 
 ![](HairShading/out/azimuthil_scattering/1first.jpg)
